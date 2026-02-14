@@ -2,74 +2,32 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mobile Mario Clone</title>
+    <title>Mario Sprite Edition</title>
     <style>
-        body { 
-            text-align: center; 
-            background: #222; 
-            color: white; 
-            font-family: Arial; 
-            margin: 0; 
-            overflow: hidden; 
-            touch-action: manipulation;
-        }
-        canvas { 
-            background: #5c94fc; 
-            display: block; 
-            margin: 0 auto; 
-            max-width: 100%; 
-            height: auto;
-            border-bottom: 4px solid #fff;
-        }
-        .ui-panel {
-            padding: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #333;
-        }
-        /* Mobile Controls */
-        .controls-container {
-            display: flex;
-            justify-content: space-around;
-            padding: 20px 10px;
-            background: #444;
-            user-select: none;
-        }
-        .btn {
-            width: 60px;
-            height: 60px;
-            background: #666;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 20px;
-            border: 3px solid #888;
-            touch-action: none;
-        }
-        .btn:active { background: #999; transform: scale(0.9); }
-        .d-pad { display: flex; gap: 10px; }
-        .action-pad { display: flex; gap: 10px; }
-        #jumpBtn { background: #2ecc71; border-color: #27ae60; }
-        #fireBtn { background: #e74c3c; border-color: #c0392b; }
+        body { text-align: center; background: #000; color: white; font-family: Arial; margin: 0; overflow: hidden; touch-action: manipulation; }
+        canvas { background: #5c94fc; display: block; margin: 0 auto; max-width: 100%; height: auto; border-bottom: 4px solid #fff; image-rendering: pixelated; }
+        .ui-panel { padding: 10px; display: flex; justify-content: space-between; background: #333; font-weight: bold; }
+        .controls-container { display: flex; justify-content: space-around; padding: 20px 10px; background: #222; user-select: none; }
+        .btn { width: 65px; height: 65px; background: #444; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 4px solid #666; touch-action: none; }
+        .btn:active { background: #888; }
+        #jumpBtn { background: #2ecc71; }
+        #fireBtn { background: #e74c3c; }
     </style>
 </head>
 <body>
     <div class="ui-panel">
-        <div>Stage: <span id="stageNum">1</span></div>
-        <div id="status">Power: Small</div>
+        <div>STAGE: <span id="stageNum">1</span></div>
+        <div id="status">MARIO</div>
     </div>
     
     <canvas id="gameCanvas" width="800" height="400"></canvas>
 
     <div class="controls-container">
-        <div class="d-pad">
+        <div style="display:flex; gap:15px;">
             <div class="btn" id="leftBtn">◀</div>
             <div class="btn" id="rightBtn">▶</div>
         </div>
-        <div class="action-pad">
+        <div style="display:flex; gap:15px;">
             <div class="btn" id="fireBtn">🔥</div>
             <div class="btn" id="jumpBtn">UP</div>
         </div>
@@ -78,90 +36,82 @@
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const stageDisplay = document.getElementById('stageNum');
-const statusDisplay = document.getElementById('status');
+
+// Assets
+const marioSprite = new Image();
+// Using a classic public domain style sprite sheet URL
+marioSprite.src = 'https://i.imgur.com/6S79O89.png'; 
+
+const goombaSprite = new Image();
+goombaSprite.src = 'https://i.imgur.com/8Bv999Y.png';
 
 // Game State
 let stage = 1;
-let gameActive = true;
-const gravity = 0.8;
-const friction = 0.8;
+let frameCount = 0;
+const gravity = 0.7;
+const friction = 0.85;
 
 const player = {
-    x: 50, y: 300, width: 30, height: 30,
-    velX: 0, velY: 0, speed: 5, jumpStrength: 13,
-    grounded: false, type: 'small', color: "#ff2222"
+    x: 50, y: 300, width: 32, height: 32,
+    velX: 0, velY: 0, speed: 5, jumpStrength: 12,
+    grounded: false, facing: 'right', animFrame: 0,
+    type: 'small' // small, big, fire
 };
 
 let platforms = [], enemies = [], powerups = [], bullets = [];
-let pipe = { x: 0, y: 0, w: 50, h: 60 };
-
-// Controls State
+let pipe = { x: 2000, y: 320, w: 50, h: 60 };
 const inputs = { left: false, right: false, up: false };
 
+// Input Listeners
 function setupTouchBtn(id, key) {
     const btn = document.getElementById(id);
     btn.addEventListener('touchstart', (e) => { e.preventDefault(); inputs[key] = true; });
     btn.addEventListener('touchend', (e) => { e.preventDefault(); inputs[key] = false; });
-    // Mouse support for testing on desktop
-    btn.addEventListener('mousedown', () => inputs[key] = true);
-    btn.addEventListener('mouseup', () => inputs[key] = false);
 }
-
 setupTouchBtn('leftBtn', 'left');
 setupTouchBtn('rightBtn', 'right');
 setupTouchBtn('jumpBtn', 'up');
 document.getElementById('fireBtn').addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    if(player.type === 'fire') shoot();
-});
-document.getElementById('fireBtn').addEventListener('mousedown', () => {
-    if(player.type === 'fire') shoot();
+    e.preventDefault(); if(player.type === 'fire') shoot();
 });
 
 function initLevel() {
-    platforms = []; enemies = []; powerups = []; bullets = [];
-    platforms.push({ x: 0, y: 380, w: 2500, h: 20 }); // Ground
+    platforms = []; enemies = []; powerups = []; 
+    platforms.push({ x: 0, y: 380, w: 3000, h: 20 }); // Ground
 
     for (let i = 0; i < 15; i++) {
-        let rx = 250 + (i * 160);
+        let rx = 300 + (i * 180);
         let ry = 220 + Math.random() * 80;
-        platforms.push({ x: rx, y: ry, w: 100, h: 20 });
-        if (Math.random() > 0.7) {
-            powerups.push({ x: rx + 40, y: ry - 30, w: 24, h: 24, type: Math.random() > 0.5 ? 'mushroom' : 'flower', collected: false });
+        platforms.push({ x: rx, y: ry, w: 90, h: 20 });
+        if (Math.random() > 0.6) {
+            powerups.push({ x: rx + 30, y: ry - 35, w: 25, h: 25, type: Math.random() > 0.5 ? 'mushroom' : 'flower' });
         }
-        if (i > 1 && Math.random() > 0.5) {
-            enemies.push({ x: rx, y: ry - 30, w: 30, h: 30, velX: 2, dead: false, type: 'goomba' });
+        if (Math.random() > 0.4) {
+            enemies.push({ x: rx + 10, y: ry - 30, w: 30, h: 30, velX: 1.5, type: 'goomba' });
         }
     }
-
-    if (stage % 3 === 0) {
-        enemies.push({ x: 1800, y: 100, w: 100, h: 100, velX: 3, hp: 5, type: 'boss', dead: false });
-        pipe.x = 2200;
+    
+    // Boss Every 3 stages
+    if(stage % 3 === 0) {
+        enemies.push({ x: 2200, y: 100, w: 80, h: 80, velX: 2, hp: 5, type: 'boss' });
+        pipe.x = 2600;
     } else {
-        pipe.x = 2000;
+        pipe.x = 2200;
     }
-    pipe.y = 320;
+    
     player.x = 50; player.y = 300;
-    stageDisplay.innerText = stage;
-    updateStatus();
-}
-
-function updateStatus() {
-    statusDisplay.innerText = "Power: " + player.type.toUpperCase();
+    document.getElementById('stageNum').innerText = stage;
 }
 
 function shoot() {
-    bullets.push({ x: player.x + 20, y: player.y + 10, w: 12, h: 12, velX: 10 });
+    bullets.push({ x: player.x + 15, y: player.y + 10, w: 10, h: 10, velX: (player.facing === 'right' ? 8 : -8) });
 }
 
 function update() {
-    if (inputs.up && player.grounded) {
-        player.velY = -player.jumpStrength;
-        player.grounded = false;
-    }
-    if (inputs.right) player.velX < player.speed && player.velX++;
-    if (inputs.left) player.velX > -player.speed && player.velX--;
+    // Movement Logic
+    if (inputs.up && player.grounded) { player.velY = -player.jumpStrength; player.grounded = false; }
+    if (inputs.right) { player.velX < player.speed && player.velX++; player.facing = 'right'; }
+    if (inputs.left) { player.velX > -player.speed && player.velX--; player.facing = 'left'; }
 
     player.velY += gravity;
     player.x += player.velX;
@@ -169,71 +119,25 @@ function update() {
     player.velX *= friction;
     player.grounded = false;
 
+    // Animation Ticker
+    if(Math.abs(player.velX) > 0.2) {
+        frameCount++;
+        if(frameCount % 5 === 0) player.animFrame = (player.animFrame + 1) % 3;
+    } else {
+        player.animFrame = 0; // Idle
+    }
+
+    // Platform Collision
     platforms.forEach(p => {
         if (player.x < p.x + p.w && player.x + player.width > p.x &&
             player.y < p.y + p.h && player.y + player.height > p.y) {
-            if (player.velY > 0) {
-                player.grounded = true;
-                player.velY = 0;
-                player.y = p.y - player.height;
-            }
+            if (player.velY > 0) { player.grounded = true; player.velY = 0; player.y = p.y - player.height; }
         }
     });
 
-    enemies.forEach(e => {
-        if (e.dead) return;
-        e.x += e.velX;
-        if (e.x > 2400 || e.x < 0) e.velX *= -1;
-
-        if (player.x < e.x + e.w && player.x + player.width > e.x &&
-            player.y < e.y + e.h && player.y + player.height > e.y) {
-            if (player.velY > 0 && e.type !== 'boss') {
-                e.dead = true;
-                player.velY = -10;
-            } else {
-                if(player.type !== 'small') {
-                    player.type = 'small';
-                    player.height = 30;
-                    player.x -= 80;
-                    updateStatus();
-                } else {
-                    alert("Game Over!");
-                    stage = 1; initLevel();
-                }
-            }
-        }
-    });
-
-    powerups.forEach(p => {
-        if (!p.collected && player.x < p.x + p.w && player.x + player.width > p.x &&
-            player.y < p.y + p.h && player.y + player.height > p.y) {
-            p.collected = true;
-            if (p.type === 'mushroom') {
-                player.type = 'big';
-                player.height = 45;
-            } else {
-                player.type = 'fire';
-                player.color = "#ff8800";
-            }
-            updateStatus();
-        }
-    });
-
-    bullets.forEach((b, i) => {
-        b.x += b.velX;
-        if(b.x > player.x + 800) bullets.splice(i,1);
-        enemies.forEach(e => {
-            if (!e.dead && b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
-                if(e.type === 'boss') { e.hp--; if(e.hp <= 0) e.dead = true; }
-                else { e.dead = true; }
-                bullets.splice(i, 1);
-            }
-        });
-    });
-
+    // Pipe / Next Level
     if (player.x > pipe.x && player.x < pipe.x + pipe.w && player.y > pipe.y - 20) {
-        stage++;
-        initLevel();
+        stage++; initLevel();
     }
 
     draw();
@@ -243,36 +147,55 @@ function update() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
-    ctx.translate(-player.x + 100, 0);
+    ctx.translate(-player.x + 150, 0);
 
-    ctx.fillStyle = "#8B4513";
-    platforms.forEach(p => ctx.fillRect(p.x, p.y, p.w, p.h));
-
+    // Draw Pipe
     ctx.fillStyle = "#2ecc71";
     ctx.fillRect(pipe.x, pipe.y, pipe.w, pipe.h);
 
-    enemies.forEach(e => {
-        if (e.dead) return;
-        ctx.fillStyle = e.type === 'boss' ? "#aa0000" : "#5d4037";
-        ctx.fillRect(e.x, e.y, e.w, e.h);
-    });
+    // Draw Platforms (Bricks)
+    ctx.fillStyle = "#ff9b3b";
+    platforms.forEach(p => ctx.fillRect(p.x, p.y, p.w, p.h));
 
+    // Draw Powerups
     powerups.forEach(p => {
-        if (p.collected) return;
-        ctx.fillStyle = p.type === 'mushroom' ? "#ff0000" : "#ffff00";
-        ctx.fillRect(p.x, p.y, p.w, p.h);
+        ctx.fillStyle = p.type === 'mushroom' ? "red" : "white";
+        ctx.beginPath(); ctx.arc(p.x+10, p.y+10, 10, 0, 7); ctx.fill();
     });
 
-    ctx.fillStyle = "orange";
-    bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+    // Draw Enemies
+    enemies.forEach(e => {
+        ctx.fillStyle = e.type === 'boss' ? "purple" : "brown";
+        ctx.fillRect(e.x, e.y, e.w, e.h);
+        e.x += e.velX; if(e.x > 2800 || e.x < 0) e.velX *= -1;
+    });
 
-    ctx.fillStyle = player.color;
-    ctx.fillRect(player.x, player.y, player.width, player.height);
+    // Draw Player Sprite
+    drawPlayer();
+
     ctx.restore();
 }
 
-initLevel();
-update();
+function drawPlayer() {
+    ctx.save();
+    let spriteX = player.animFrame * 16; // Assuming 16x16 frames in sheet
+    let spriteY = 0;
+    
+    if (!player.grounded) spriteX = 32; // Jump frame
+    
+    if (player.facing === 'left') {
+        ctx.scale(-1, 1);
+        ctx.drawImage(marioSprite, spriteX, spriteY, 16, 16, -player.x - player.width, player.y, player.width, player.height);
+    } else {
+        ctx.drawImage(marioSprite, spriteX, spriteY, 16, 16, player.x, player.y, player.width, player.height);
+    }
+    ctx.restore();
+}
+
+marioSprite.onload = () => {
+    initLevel();
+    update();
+};
 </script>
 </body>
 </html>
