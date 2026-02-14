@@ -2,177 +2,277 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mario: World Explorer</title>
+    <title>Mobile Mario Clone</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #5c94fa; font-family: 'Arial', sans-serif; user-select: none; transition: background 1s; }
-        canvas { display: block; touch-action: none; }
-        #ui { position: absolute; top: 10px; left: 10px; color: white; font-size: 18px; text-shadow: 2px 2px #000; z-index: 5; pointer-events: none; }
-        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
-        .btn { width: 65px; height: 65px; background: rgba(255,255,255,0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; border: 2px solid white; touch-action: none; }
-        .btn:active { background: rgba(255,255,255,0.6); }
-        .d-pad, .action-btns { display: flex; gap: 10px; }
-        #fireBtn { background: rgba(255, 69, 0, 0.4); display: none; }
+        body { 
+            text-align: center; 
+            background: #222; 
+            color: white; 
+            font-family: Arial; 
+            margin: 0; 
+            overflow: hidden; 
+            touch-action: manipulation;
+        }
+        canvas { 
+            background: #5c94fc; 
+            display: block; 
+            margin: 0 auto; 
+            max-width: 100%; 
+            height: auto;
+            border-bottom: 4px solid #fff;
+        }
+        .ui-panel {
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #333;
+        }
+        /* Mobile Controls */
+        .controls-container {
+            display: flex;
+            justify-content: space-around;
+            padding: 20px 10px;
+            background: #444;
+            user-select: none;
+        }
+        .btn {
+            width: 60px;
+            height: 60px;
+            background: #666;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 20px;
+            border: 3px solid #888;
+            touch-action: none;
+        }
+        .btn:active { background: #999; transform: scale(0.9); }
+        .d-pad { display: flex; gap: 10px; }
+        .action-pad { display: flex; gap: 10px; }
+        #jumpBtn { background: #2ecc71; border-color: #27ae60; }
+        #fireBtn { background: #e74c3c; border-color: #c0392b; }
     </style>
 </head>
 <body>
-    <div id="ui">Stage: <span id="stageNum">1</span> | Score: <span id="score">0</span><br><span id="status">Small</span> <span id="bossHP"></span></div>
-    
-    <div class="controls">
-        <div class="d-pad"><div class="btn" id="leftBtn">←</div><div class="btn" id="rightBtn">→</div></div>
-        <div class="action-btns"><div class="btn" id="fireBtn">FIRE</div><div class="btn" id="jumpBtn">JUMP</div></div>
+    <div class="ui-panel">
+        <div>Stage: <span id="stageNum">1</span></div>
+        <div id="status">Power: Small</div>
     </div>
-    <canvas id="game"></canvas>
+    
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <div class="controls-container">
+        <div class="d-pad">
+            <div class="btn" id="leftBtn">◀</div>
+            <div class="btn" id="rightBtn">▶</div>
+        </div>
+        <div class="action-pad">
+            <div class="btn" id="fireBtn">🔥</div>
+            <div class="btn" id="jumpBtn">UP</div>
+        </div>
+    </div>
 
 <script>
-const canvas = document.getElementById('game');
+const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const stageDisplay = document.getElementById('stageNum');
+const statusDisplay = document.getElementById('status');
 
-let score = 0, stage = 1, powerMode = 0;
-let platforms = [], enemies = [], items = [], fireballs = [], clouds = [];
-let pipe = null, boss = null, keys = { left: false, right: false };
+// Game State
+let stage = 1;
+let gameActive = true;
+const gravity = 0.8;
+const friction = 0.8;
 
-// Theme Colors
-const themes = {
-    1: { sky: "#5c94fa", dirt: "#8b4513", grass: "#2e8b57" }, // Overworld
-    2: { sky: "#1a1a2e", dirt: "#4b0082", grass: "#9370db" }, // Cave
-    0: { sky: "#300", dirt: "#500", grass: "#f00" }           // Castle (Boss)
+const player = {
+    x: 50, y: 300, width: 30, height: 30,
+    velX: 0, velY: 0, speed: 5, jumpStrength: 13,
+    grounded: false, type: 'small', color: "#ff2222"
 };
 
-const player = { x: 100, y: 0, w: 30, h: 40, dy: 0, dx: 0, speed: 5, onGround: false };
+let platforms = [], enemies = [], powerups = [], bullets = [];
+let pipe = { x: 0, y: 0, w: 50, h: 60 };
 
-function generateLevel() {
-    const themeIdx = stage % 3 === 0 ? 0 : (stage % 3);
-    const theme = themes[themeIdx];
-    document.body.style.background = theme.sky;
-    
-    platforms = [{ x: 0, y: canvas.height - 100, w: 600, h: 100 }];
-    enemies = []; items = []; fireballs = []; boss = null; pipe = null;
-    
-    // Simple clouds for Overworld
-    clouds = themeIdx === 1 ? Array.from({length: 5}, () => ({x: Math.random()*canvas.width, y: Math.random()*200, w: 60})) : [];
+// Controls State
+const inputs = { left: false, right: false, up: false };
 
-    if (themeIdx === 0) { // BOSS LEVEL
-        platforms = [{ x: 0, y: canvas.height - 100, w: canvas.width, h: 100 }];
-        boss = { x: canvas.width - 150, y: canvas.height - 200, w: 80, h: 80, dy: 0, hp: 5, jumpTimer: 0 };
-    } else {
-        let currentX = 600;
-        for(let i = 0; i < 7; i++) {
-            let pY = Math.random() * (canvas.height - 350) + 250;
-            let pW = Math.random() * 200 + 100;
-            let newP = { x: currentX + 120, y: pY, w: pW, h: 40 };
-            platforms.push(newP);
-            if(Math.random() > 0.4) enemies.push({ x: newP.x + 20, y: pY - 30, w: 30, h: 30, dir: 1, parent: newP });
-            if(Math.random() > 0.7) items.push({ x: newP.x + 40, y: pY - 35, w: 25, h: 25 });
-            currentX = newP.x + pW;
+function setupTouchBtn(id, key) {
+    const btn = document.getElementById(id);
+    btn.addEventListener('touchstart', (e) => { e.preventDefault(); inputs[key] = true; });
+    btn.addEventListener('touchend', (e) => { e.preventDefault(); inputs[key] = false; });
+    // Mouse support for testing on desktop
+    btn.addEventListener('mousedown', () => inputs[key] = true);
+    btn.addEventListener('mouseup', () => inputs[key] = false);
+}
+
+setupTouchBtn('leftBtn', 'left');
+setupTouchBtn('rightBtn', 'right');
+setupTouchBtn('jumpBtn', 'up');
+document.getElementById('fireBtn').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if(player.type === 'fire') shoot();
+});
+document.getElementById('fireBtn').addEventListener('mousedown', () => {
+    if(player.type === 'fire') shoot();
+});
+
+function initLevel() {
+    platforms = []; enemies = []; powerups = []; bullets = [];
+    platforms.push({ x: 0, y: 380, w: 2500, h: 20 }); // Ground
+
+    for (let i = 0; i < 15; i++) {
+        let rx = 250 + (i * 160);
+        let ry = 220 + Math.random() * 80;
+        platforms.push({ x: rx, y: ry, w: 100, h: 20 });
+        if (Math.random() > 0.7) {
+            powerups.push({ x: rx + 40, y: ry - 30, w: 24, h: 24, type: Math.random() > 0.5 ? 'mushroom' : 'flower', collected: false });
         }
-        pipe = { x: currentX + 100, y: canvas.height - 250, w: 60, h: 150 };
-        platforms.push({ x: pipe.x - 20, y: canvas.height - 100, w: 200, h: 100 });
+        if (i > 1 && Math.random() > 0.5) {
+            enemies.push({ x: rx, y: ry - 30, w: 30, h: 30, velX: 2, dead: false, type: 'goomba' });
+        }
     }
-    player.x = 100; player.y = canvas.height - 300;
-    document.getElementById('stageNum').innerText = stage;
+
+    if (stage % 3 === 0) {
+        enemies.push({ x: 1800, y: 100, w: 100, h: 100, velX: 3, hp: 5, type: 'boss', dead: false });
+        pipe.x = 2200;
+    } else {
+        pipe.x = 2000;
+    }
+    pipe.y = 320;
+    player.x = 50; player.y = 300;
+    stageDisplay.innerText = stage;
+    updateStatus();
+}
+
+function updateStatus() {
+    statusDisplay.innerText = "Power: " + player.type.toUpperCase();
+}
+
+function shoot() {
+    bullets.push({ x: player.x + 20, y: player.y + 10, w: 12, h: 12, velX: 10 });
 }
 
 function update() {
-    if (keys.left) player.dx = -player.speed; else if (keys.right) player.dx = player.speed; else player.dx = 0;
-    player.dy += 0.6; player.x += player.dx; player.y += player.dy; player.onGround = false;
-
-    // Scrolling
-    if (!boss && player.x > canvas.width / 2) {
-        let diff = player.x - canvas.width / 2;
-        player.x = canvas.width / 2;
-        platforms.forEach(p => p.x -= diff);
-        enemies.forEach(e => e.x -= diff);
-        items.forEach(m => m.x -= diff);
-        fireballs.forEach(f => f.x -= diff);
-        clouds.forEach(c => c.x -= diff * 0.3); // Parallax effect
-        if(pipe) pipe.x -= diff;
+    if (inputs.up && player.grounded) {
+        player.velY = -player.jumpStrength;
+        player.grounded = false;
     }
+    if (inputs.right) player.velX < player.speed && player.velX++;
+    if (inputs.left) player.velX > -player.speed && player.velX--;
+
+    player.velY += gravity;
+    player.x += player.velX;
+    player.y += player.velY;
+    player.velX *= friction;
+    player.grounded = false;
 
     platforms.forEach(p => {
-        if (player.x < p.x + p.w && player.x + player.w > p.x && player.y + player.h > p.y && player.y + player.h < p.y + player.dy + 12) {
-            player.y = p.y - player.h; player.dy = 0; player.onGround = true;
+        if (player.x < p.x + p.w && player.x + player.width > p.x &&
+            player.y < p.y + p.h && player.y + player.height > p.y) {
+            if (player.velY > 0) {
+                player.grounded = true;
+                player.velY = 0;
+                player.y = p.y - player.height;
+            }
         }
     });
 
-    if (boss) {
-        document.getElementById('bossHP').innerText = "| BOSS HP: " + boss.hp;
-        boss.jumpTimer++;
-        if (boss.jumpTimer > 80) { boss.dy = -15; boss.jumpTimer = 0; }
-        boss.dy += 0.5; boss.y += boss.dy;
-        if (boss.y > canvas.height - 180) { boss.y = canvas.height - 180; boss.dy = 0; }
-        if (player.x < boss.x + boss.w && player.x + player.w > boss.x && player.y < boss.y + boss.h && player.y + player.h > boss.y) {
-            if (player.dy > 0 && player.y < boss.y + 20) { boss.hp--; player.dy = -15; } else hitPlayer();
+    enemies.forEach(e => {
+        if (e.dead) return;
+        e.x += e.velX;
+        if (e.x > 2400 || e.x < 0) e.velX *= -1;
+
+        if (player.x < e.x + e.w && player.x + player.width > e.x &&
+            player.y < e.y + e.h && player.y + player.height > e.y) {
+            if (player.velY > 0 && e.type !== 'boss') {
+                e.dead = true;
+                player.velY = -10;
+            } else {
+                if(player.type !== 'small') {
+                    player.type = 'small';
+                    player.height = 30;
+                    player.x -= 80;
+                    updateStatus();
+                } else {
+                    alert("Game Over!");
+                    stage = 1; initLevel();
+                }
+            }
         }
-        if (boss.hp <= 0) { boss = null; pipe = { x: canvas.width - 100, y: canvas.height - 250, w: 60, h: 150 }; document.getElementById('bossHP').innerText = ""; }
+    });
+
+    powerups.forEach(p => {
+        if (!p.collected && player.x < p.x + p.w && player.x + player.width > p.x &&
+            player.y < p.y + p.h && player.y + player.height > p.y) {
+            p.collected = true;
+            if (p.type === 'mushroom') {
+                player.type = 'big';
+                player.height = 45;
+            } else {
+                player.type = 'fire';
+                player.color = "#ff8800";
+            }
+            updateStatus();
+        }
+    });
+
+    bullets.forEach((b, i) => {
+        b.x += b.velX;
+        if(b.x > player.x + 800) bullets.splice(i,1);
+        enemies.forEach(e => {
+            if (!e.dead && b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
+                if(e.type === 'boss') { e.hp--; if(e.hp <= 0) e.dead = true; }
+                else { e.dead = true; }
+                bullets.splice(i, 1);
+            }
+        });
+    });
+
+    if (player.x > pipe.x && player.x < pipe.x + pipe.w && player.y > pipe.y - 20) {
+        stage++;
+        initLevel();
     }
 
-    fireballs.forEach((f, fi) => {
-        f.x += f.dx; f.y += f.dy; f.dy += 0.4;
-        if (boss && f.x < boss.x + boss.w && f.x + f.w > boss.x && f.y < boss.y + boss.h && f.y + f.h > boss.y) {
-            boss.hp--; fireballs.splice(fi, 1);
-        }
-    });
-
-    items.forEach((m, i) => {
-        if (player.x < m.x + m.w && player.x + player.w > m.x && player.y < m.y + m.h && player.y + player.h > m.y) {
-            powerMode = 2; document.getElementById('fireBtn').style.display = 'flex';
-            player.h = 65; items.splice(i, 1); document.getElementById('status').innerText = "FIRE";
-        }
-    });
-
-    enemies.forEach((e, i) => {
-        e.x += (e.dir * 2);
-        if (e.x < e.parent.x || e.x + e.w > e.parent.x + e.parent.w) e.dir *= -1;
-        if (player.x < e.x + e.w && player.x + player.w > e.x && player.y < e.y + e.h && player.y + player.h > e.y) {
-            if (player.dy > 0) { enemies.splice(i, 1); player.dy = -10; score += 50; } else hitPlayer();
-        }
-    });
-
-    if (pipe && player.x < pipe.x + pipe.w && player.x + player.w > pipe.x && player.y < pipe.y + pipe.h && player.y + player.h > pipe.y) {
-        stage++; score += 500; generateLevel();
-    }
-
-    if (player.y > canvas.height || player.x < 0) location.reload();
-    document.getElementById('score').innerText = score;
-}
-
-function hitPlayer() {
-    if (powerMode > 0) { powerMode = 0; player.h = 40; document.getElementById('fireBtn').style.display = 'none'; document.getElementById('status').innerText = "Small"; player.x -= 150; }
-    else location.reload();
+    draw();
+    requestAnimationFrame(update);
 }
 
 function draw() {
-    const theme = themes[stage % 3 === 0 ? 0 : (stage % 3)];
-    ctx.clearRect(0,0,canvas.width, canvas.height);
-    
-    // Clouds
-    ctx.fillStyle = "white";
-    clouds.forEach(c => { ctx.beginPath(); ctx.arc(c.x, c.y, 20, 0, Math.PI*2); ctx.arc(c.x+20, c.y-10, 20, 0, Math.PI*2); ctx.arc(c.x+40, c.y, 20, 0, Math.PI*2); ctx.fill(); });
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(-player.x + 100, 0);
 
-    platforms.forEach(p => {
-        ctx.fillStyle = theme.dirt; ctx.fillRect(p.x, p.y, p.w, p.h);
-        ctx.fillStyle = theme.grass; ctx.fillRect(p.x, p.y, p.w, 10);
+    ctx.fillStyle = "#8B4513";
+    platforms.forEach(p => ctx.fillRect(p.x, p.y, p.w, p.h));
+
+    ctx.fillStyle = "#2ecc71";
+    ctx.fillRect(pipe.x, pipe.y, pipe.w, pipe.h);
+
+    enemies.forEach(e => {
+        if (e.dead) return;
+        ctx.fillStyle = e.type === 'boss' ? "#aa0000" : "#5d4037";
+        ctx.fillRect(e.x, e.y, e.w, e.h);
     });
 
-    if(pipe) { ctx.fillStyle = "#228B22"; ctx.fillRect(pipe.x, pipe.y, pipe.w, pipe.h); ctx.fillStyle = "#006400"; ctx.fillRect(pipe.x-5, pipe.y, pipe.w+10, 30); }
-    items.forEach(m => { ctx.fillStyle = "orange"; ctx.beginPath(); ctx.arc(m.x+12, m.y+12, 12, 0, Math.PI*2); ctx.fill(); });
-    fireballs.forEach(f => { ctx.fillStyle = "orange"; ctx.beginPath(); ctx.arc(f.x+5, f.y+5, 5, 0, Math.PI*2); ctx.fill(); });
-    ctx.fillStyle = powerMode === 2 ? "#fff" : "#f00"; ctx.fillRect(player.x, player.y, player.w, player.h);
-    ctx.fillStyle = "#654321"; enemies.forEach(e => ctx.fillRect(e.x, e.y, e.w, e.h));
-    if(boss) { ctx.fillStyle = "purple"; ctx.fillRect(boss.x, boss.y, boss.w, boss.h); ctx.fillStyle="red"; ctx.fillRect(boss.x+10, boss.y+10, 10, 10); ctx.fillRect(boss.x+60, boss.y+10, 10, 10); }
+    powerups.forEach(p => {
+        if (p.collected) return;
+        ctx.fillStyle = p.type === 'mushroom' ? "#ff0000" : "#ffff00";
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+    });
+
+    ctx.fillStyle = "orange";
+    bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+    ctx.restore();
 }
 
-function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
-
-document.getElementById('leftBtn').ontouchstart = () => keys.left = true;
-document.getElementById('leftBtn').ontouchend = () => keys.left = false;
-document.getElementById('rightBtn').ontouchstart = () => keys.right = true;
-document.getElementById('rightBtn').ontouchend = () => keys.right = false;
-document.getElementById('jumpBtn').ontouchstart = () => { if(player.onGround) player.dy = -13; };
-document.getElementById('fireBtn').ontouchstart = () => { if(powerMode === 2) fireballs.push({x: player.x+20, y: player.y+10, w:10, h:10, dx: 8, dy: -4}); };
-
-canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-generateLevel(); gameLoop();
+initLevel();
+update();
 </script>
 </body>
 </html>
