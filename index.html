@@ -1,193 +1,848 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>JS Platformer Pro</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel Platformer Clone</title>
     <style>
-        body { margin: 0; background: #222; color: white; font-family: sans-serif; overflow: hidden; }
-        canvas { display: block; background: #87CEEB; margin: 0 auto; border: 4px solid #444; }
-        #ui { position: absolute; top: 10px; left: 10px; pointer-events: none; }
-        #menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 20px; text-align: center; border-radius: 10px; }
-        button { padding: 10px 20px; margin: 5px; cursor: pointer; font-weight: bold; }
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            color: white;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px; /* Reference width, dynamic in mobile */
+            height: 600px;
+            background-color: #729fcf; /* Initial sky color */
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            image-rendering: pixelated; /* Essential for pixel art feel */
+        }
+
+        /* Elements within the canvas */
+        .player {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            background-color: #ff3333; /* Red - Mario-like */
+            background-image: url('data:image/svg+xml;base64,...'); /* (Base64 of a pixel Mario sprite would go here) */
+            z-index: 10;
+        }
+
+        .goomba, .koopa, .boss {
+            position: absolute;
+            z-index: 5;
+        }
+        .goomba { width: 32px; height: 32px; background-color: #8b4513; }
+        .koopa { width: 32px; height: 32px; background-color: #228b22; border-radius: 50% 50% 0 0; }
+        .boss { width: 64px; height: 64px; background-color: #ff00ff; border: 4px solid #fff; z-index: 6; }
+
+        .platform {
+            position: absolute;
+            height: 32px;
+            background-color: #228b22; /* Green top */
+            box-shadow: 0 5px 0 0 #8b4513; /* Brown dirt bottom */
+        }
+
+        .coin {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background-color: #ffd700;
+            border-radius: 50%;
+            z-index: 4;
+            display: none; /* Only show when powerup active */
+        }
+
+        .powerup {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            background-color: #ff66ff;
+            border-radius: 50%;
+            display: none; /* Start hidden */
+            z-index: 8;
+        }
+
+        /* UI Overlays */
+        #ui-bar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
+            z-index: 100;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        #game-over-screen, #upgrade-shop {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+
+        #upgrade-shop button {
+            background-color: #ffd700;
+            color: #333;
+            border: none;
+            padding: 10px 20px;
+            font-size: 18px;
+            margin: 10px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #upgrade-shop button:hover { background-color: #e6c300; }
+
+        #upgrade-shop .price { font-size: 14px; opacity: 0.8; }
+
+        #stage-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 24px;
+            z-index: 101;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        #powerup-time {
+            position: absolute;
+            bottom: 70px;
+            right: 20px;
+            font-size: 18px;
+            color: #ff66ff;
+            z-index: 102;
+            text-shadow: 1px 1px 0 #000;
+            display: none;
+        }
+
+        /* Mobile Controls */
+        #mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            display: none;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 300;
+        }
+
+        .mobile-btn {
+            width: 70px;
+            height: 70px;
+            background: rgba(255,255,255,0.3);
+            border: 2px solid #fff;
+            border-radius: 50%;
+            color: white;
+            font-size: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+
+        .mobile-btn:active { background: rgba(255,255,255,0.5); }
+
+        #move-left { position: relative; left: 0px; }
+        #move-right { position: relative; left: -10px; }
+        #move-jump { position: relative; }
+        #move-upgrade { 
+            position: relative;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 215, 0, 0.4);
+            font-size: 18px;
+            bottom: -10px;
+        }
+
     </style>
 </head>
 <body>
 
-<div id="ui">
-    Gems: <span id="gemCount">0</span> | Class: <span id="className">-</span>
-</div>
+<div id="game-container">
+    <div class="player" id="player"></div>
+    <div id="platforms"></div>
+    <div id="enemies"></div>
+    <div id="coins"></div>
+    <div class="powerup" id="powerup"></div>
+    <div id="bosses"></div>
 
-<div id="menu">
-    <h2>Select Your Hero</h2>
-    <button onclick="startGame('Scout')">SCOUT (Fast/Short Jump)</button><br>
-    <button onclick="startGame('Tank')">TANK (Slow/Heavy)</button><br>
-    <button onclick="startGame('Leaper')">LEAPER (Normal/High Jump)</button>
-</div>
+    <div id="ui-bar">
+        Score: <span id="score">0</span> | Coins: <span id="coin-count">0</span>
+    </div>
 
-<canvas id="gameCanvas"></canvas>
+    <div id="stage-indicator">STAGE: <span id="current-stage">1</span></div>
+    <div id="powerup-time">Powerup: 10s</div>
+
+    <div id="game-over-screen">
+        <h1 id="game-over-text">GAME OVER</h1>
+        <h2>Final Score: <span id="final-score">0</span></h2>
+        <h2>Total Coins: <span id="final-coins">0</span></h2>
+        <button onclick="startGame()">Try Again</button>
+    </div>
+
+    <div id="upgrade-shop">
+        <h1>Upgrade Shop</h1>
+        <h2>Total Coins: <span id="shop-coins">0</span></h2>
+        <div id="shop-items">
+            </div>
+        <button id="close-shop">Return to Game</button>
+    </div>
+
+    <div id="mobile-controls">
+        <div style="display: flex;">
+            <div class="mobile-btn" id="move-left">&#8592;</div>
+            <div class="mobile-btn" id="move-right">&#8594;</div>
+        </div>
+        <div style="display: flex; align-items: flex-end;">
+            <div class="mobile-btn" id="move-upgrade">$</div>
+            <div class="mobile-btn" id="move-jump">&#11014;</div>
+        </div>
+    </div>
+</div>
 
 <script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+    // Game Setup
+    const container = document.getElementById('game-container');
+    const playerEl = document.getElementById('player');
+    const platformsContainer = document.getElementById('platforms');
+    const enemiesContainer = document.getElementById('enemies');
+    const coinsContainer = document.getElementById('coins');
+    const powerupEl = document.getElementById('powerup');
+    const bossesContainer = document.getElementById('bosses');
+    const scoreEl = document.getElementById('score');
+    const coinCountEl = document.getElementById('coin-count');
+    const stageEl = document.getElementById('current-stage');
+    const gameOverEl = document.getElementById('game-over-screen');
+    const upgradeShopEl = document.getElementById('upgrade-shop');
+    const shopItemsContainer = document.getElementById('shop-items');
+    const mobileControls = document.getElementById('mobile-controls');
+    const powerupTimeEl = document.getElementById('powerup-time');
 
-// --- Game Configuration ---
-const GRAVITY = 0.8;
-const FRICTION = 0.85;
-const TILE_SIZE = 40;
+    // Constants & Global Variables
+    let gameInterval;
+    const gameWidth = 800; // Reference width
+    const gameHeight = 600;
 
-const CLASSES = {
-    'Scout':  { speed: 7, jump: -12, color: '#2ecc71' },
-    'Tank':   { speed: 4, jump: -14, color: '#e74c3c' },
-    'Leaper': { speed: 5, jump: -18, color: '#f1c40f' }
-};
+    // Default Physics
+    const GRAVITY_DEFAULT = 0.8;
+    const JUMP_FORCE_DEFAULT = -18;
+    const MOVE_SPEED_DEFAULT = 5;
+    const POWERUP_DURATION = 10000; // ms
 
-let player = {
-    x: 100, y: 100, width: 30, height: 30,
-    velX: 0, velY: 0, grounded: false,
-    stats: CLASSES['Scout']
-};
+    // Game State
+    let state = {
+        score: 0,
+        coins: 0,
+        stage: 1,
+        isRunning: false,
+        isPowerupActive: false,
+        powerupTimer: null,
+        shopOpen: false,
+        mobile: false
+    };
 
-let keys = {};
-let gems = 0;
-let gameState = 'menu';
+    // Upgrades State
+    let upgrades = {
+        jumpBoost: { level: 0, maxLevel: 5, basePrice: 10, currentForce: JUMP_FORCE_DEFAULT },
+        speedBoost: { level: 0, maxLevel: 5, basePrice: 15, currentSpeed: MOVE_SPEED_DEFAULT },
+        moreCoins: { level: 0, maxLevel: 3, basePrice: 20, value: 1 }
+    };
 
-// --- Level Design (1 = Platform, 2 = Spike, 3 = Gem) ---
-const level = [
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0],
-    [0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0],
-    [0,1,1,1,1,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-];
+    // Object Arrays
+    let platforms = [];
+    let enemies = [];
+    let boss = null;
+    let availableCoins = [];
+    let powerup = null;
 
-function startGame(type) {
-    player.stats = CLASSES[type];
-    player.x = 100; player.y = 100;
-    player.velX = 0; player.velY = 0;
-    gems = 0;
-    document.getElementById('className').innerText = type;
-    document.getElementById('menu').style.display = 'none';
-    gameState = 'playing';
-    resize();
-}
-
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-}
-
-window.addEventListener('keydown', e => keys[e.code] = true);
-window.addEventListener('keyup', e => keys[e.code] = false);
-
-function update() {
-    if (gameState !== 'playing') return;
-
-    // Movement Logic (Snappy velocity changes)
-    if (keys['ArrowRight'] || keys['KeyD']) player.velX = player.stats.speed;
-    else if (keys['ArrowLeft'] || keys['KeyA']) player.velX = -player.stats.speed;
-    else player.velX *= FRICTION;
-
-    if ((keys['ArrowUp'] || keys['Space'] || keys['KeyW']) && player.grounded) {
-        player.velY = player.stats.jump;
-        player.grounded = false;
+    // Mobile Detection
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+        state.mobile = true;
+        mobileControls.style.display = 'flex';
+        // Adjust physics for mobile if needed
+        MOVE_SPEED_DEFAULT = 6;
     }
 
-    player.velY += GRAVITY;
-    player.x += player.velX;
-    player.y += player.velY;
+    // Input Tracking
+    const keys = {
+        left: false,
+        right: false,
+        jump: false,
+        upgrade: false
+    };
 
-    player.grounded = false;
+    // Main Game Loop Function
+    function gameLoop() {
+        if (!state.isRunning || state.shopOpen) return;
 
-    // Tile Collision
-    for (let row = 0; row < level.length; row++) {
-        for (let col = 0; col < level[row].length; col++) {
-            let tile = level[row][col];
-            if (tile === 0) continue;
+        updatePlayer();
+        updateEnemies();
+        updatePowerup();
+        checkStageComplete();
+        updateUI();
+    }
 
-            let tx = col * TILE_SIZE;
-            let ty = canvas.height - (level.length * TILE_SIZE) + (row * TILE_SIZE);
+    // --- Start / Reset Game ---
+    function startGame() {
+        // Clear old states
+        gameOverEl.style.display = 'none';
+        state.isRunning = true;
+        state.score = 0;
+        state.coins = 0;
+        state.stage = 1;
+        state.isPowerupActive = false;
+        if(state.powerupTimer) clearTimeout(state.powerupTimer);
 
-            // AABB Collision Detection
-            if (player.x < tx + TILE_SIZE && player.x + player.width > tx &&
-                player.y < ty + TILE_SIZE && player.y + player.height > ty) {
+        resetPlayer();
+        resetUpgrades();
+        initStage();
+
+        if (gameInterval) clearInterval(gameInterval);
+        gameInterval = setInterval(gameLoop, 1000 / 60); // ~60 FPS
+    }
+
+    // --- Physics, Collision, and Objects ---
+
+    let player = {
+        x: 50,
+        y: gameHeight - 100,
+        vx: 0,
+        vy: 0,
+        width: 32,
+        height: 32,
+        onGround: false,
+        jumpCount: 0,
+        isInvincible: false
+    };
+
+    function resetPlayer() {
+        player.x = 50;
+        player.y = gameHeight - 100;
+        player.vx = 0;
+        player.vy = 0;
+        player.jumpCount = 0;
+        playerEl.style.backgroundColor = '#ff3333';
+    }
+
+    function resetUpgrades() {
+        upgrades.jumpBoost.level = 0; upgrades.jumpBoost.currentForce = JUMP_FORCE_DEFAULT;
+        upgrades.speedBoost.level = 0; upgrades.speedBoost.currentSpeed = MOVE_SPEED_DEFAULT;
+        upgrades.moreCoins.level = 0; upgrades.moreCoins.value = 1;
+    }
+
+    function isColliding(obj1, obj2) {
+        return obj1.x < obj2.x + obj2.width &&
+               obj1.x + obj1.width > obj2.x &&
+               obj1.y < obj2.y + obj2.height &&
+               obj1.y + obj1.height > obj2.y;
+    }
+
+    function getPlatformCollision(nextY) {
+        for (let plat of platforms) {
+            // Check vertical collision (Mario style stomp)
+            if (player.x + player.width > plat.x && player.x < plat.x + plat.width &&
+                player.y + player.height <= plat.y && nextY + player.height > plat.y) {
+                return plat;
+            }
+            // Check side collision (bounce back)
+            if (nextY + player.height > plat.y && nextY < plat.y + plat.height &&
+               ((player.x + player.width <= plat.x && player.x + player.width + player.vx > plat.x) ||
+                (player.x >= plat.x + plat.width && player.x + player.vx < plat.x + plat.width))) {
+                player.vx *= -0.5;
+            }
+        }
+        return null;
+    }
+
+    function updatePlayer() {
+        // Apply Gravity
+        player.vy += GRAVITY_DEFAULT;
+
+        // Move Left / Right
+        let targetVx = 0;
+        if (keys.left) targetVx -= upgrades.speedBoost.currentSpeed;
+        if (keys.right) targetVx += upgrades.speedBoost.currentSpeed;
+        
+        // Horizontal deceleration (smooth movement)
+        player.vx += (targetVx - player.vx) * 0.2;
+
+        // Jump
+        if (keys.jump && player.jumpCount < 2) {
+            player.vy = upgrades.jumpBoost.currentForce;
+            player.onGround = false;
+            player.jumpCount++;
+            keys.jump = false; // Prevents held-button auto-jump
+        }
+
+        // Apply velocities and pre-check for floor collisions
+        let nextY = player.y + player.vy;
+        let ground = getPlatformCollision(nextY);
+
+        if (ground) {
+            player.vy = 0;
+            player.y = ground.y - player.height;
+            player.onGround = true;
+            player.jumpCount = 0;
+        } else {
+            player.y = nextY;
+            player.onGround = false;
+        }
+
+        player.x += player.vx;
+
+        // Boundary Checks
+        if (player.x < 0) player.x = 0;
+        if (player.x > gameWidth - player.width) player.x = gameWidth - player.width;
+        if (player.y > gameHeight + player.height) { // Fell off screen
+            gameOver();
+        }
+
+        // Update DOM element position
+        playerEl.style.left = player.x + 'px';
+        playerEl.style.top = player.y + 'px';
+    }
+
+    // --- Stage Initialization & Levels ---
+
+    function initStage() {
+        // Clear old DOM objects
+        platformsContainer.innerHTML = '';
+        enemiesContainer.innerHTML = '';
+        coinsContainer.innerHTML = '';
+        bossesContainer.innerHTML = '';
+        platforms = [];
+        enemies = [];
+        availableCoins = [];
+        boss = null;
+        powerup = null;
+        powerupEl.style.display = 'none';
+        
+        stageEl.innerText = state.stage;
+
+        // Create standard floor
+        createPlatform(0, gameHeight - 64, gameWidth, 64);
+
+        // Stages logic
+        if (state.stage % 5 === 0) {
+            createBossLevel();
+        } else {
+            createStandardLevel();
+        }
+    }
+
+    function createPlatform(x, y, w, h) {
+        platforms.push({ x, y, width: w, height: h });
+        const p = document.createElement('div');
+        p.className = 'platform';
+        p.style.left = x + 'px';
+        p.style.top = y + 'px';
+        p.style.width = w + 'px';
+        p.style.height = h + 'px';
+        platformsContainer.appendChild(p);
+    }
+
+    function createEnemy(type, x, y, speed, width=32, height=32, health=1) {
+        enemies.push({ type, x, y, width, height, speed, health, dx: speed, dying: false, invulnerable: false });
+        const e = document.createElement('div');
+        e.className = type;
+        e.style.left = x + 'px';
+        e.style.top = y + 'px';
+        if (width !== 32) e.style.width = width + 'px';
+        if (height !== 32) e.style.height = height + 'px';
+        enemiesContainer.appendChild(e);
+        return e;
+    }
+
+    function createStandardLevel() {
+        // Dynamic generation based on stage
+        let numPlatforms = 3 + Math.floor(state.stage / 2);
+        let numEnemies = 3 + state.stage;
+        let numCoins = 10 + state.stage * 2;
+
+        // Platforms (avoiding player start)
+        for (let i = 0; i < numPlatforms; i++) {
+            let pw = 100 + Math.random() * 200;
+            let px = 100 + Math.random() * (gameWidth - pw - 100);
+            let py = gameHeight - 150 - (i * 100) - Math.random() * 50;
+            createPlatform(px, py, pw, 32);
+        }
+
+        // Enemies
+        for (let i = 0; i < numEnemies; i++) {
+            let type = Math.random() > 0.4 ? 'goomba' : 'koopa';
+            createEnemy(type, 150 + Math.random() * 600, gameHeight - 100, (1 + state.stage/10) * (Math.random() > 0.5 ? 1 : -1));
+        }
+
+        // Coins (only visible during powerup)
+        for (let i = 0; i < numCoins; i++) {
+            availableCoins.push({ x: 50 + Math.random() * 700, y: gameHeight - 150 - Math.random() * 400, width: 16, height: 16, collected: false });
+            const c = document.createElement('div');
+            c.className = 'coin';
+            c.style.left = availableCoins[i].x + 'px';
+            c.style.top = availableCoins[i].y + 'px';
+            coinsContainer.appendChild(c);
+        }
+
+        // Powerup
+        spawnPowerup();
+    }
+
+    function createBossLevel() {
+        createPlatform(200, gameHeight - 200, 400, 32);
+        // Boss is just a larger enemy with more health and custom movement
+        boss = createEnemy('boss', gameWidth - 100, gameHeight - 160, -2, 64, 64, 5 + state.stage / 5);
+        boss.boss = true;
+        // Adjust boss DOM element
+        bossesContainer.appendChild(enemiesContainer.lastChild); // Move to boss layer for correct styling/size
+    }
+
+    function checkStageComplete() {
+        // Stage complete when all enemies or boss is gone
+        if (enemies.filter(e => !e.boss).length === 0 && !boss) {
+            state.stage++;
+            initStage();
+        }
+    }
+
+    // --- Enemy Logic & Physics ---
+
+    function updateEnemies() {
+        const enemyEls = enemiesContainer.children;
+        
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let enemy = enemies[i];
+            let enemyEl = (enemy.boss) ? bossesContainer.firstChild : enemyEls[i]; // Find correct DOM element
+
+            if (enemy.dying) {
+                enemyEl.style.opacity = parseFloat(enemyEl.style.opacity || 1) - 0.05;
+                if (enemyEl.style.opacity <= 0) {
+                    enemyEl.remove();
+                    enemies.splice(i, 1);
+                    if (enemy.boss) boss = null;
+                }
+                continue;
+            }
+
+            // Simple movement (patrol or chase for boss)
+            if (enemy.boss) {
+                // Boss basic logic: patrol horizontally on its platform
+                if (enemy.x < 200 || enemy.x > 600 - enemy.width) enemy.dx *= -1;
+            } else {
+                // Regular enemies turn at platform edges or boundaries
+                if (enemy.x < 0 || enemy.x > gameWidth - enemy.width) enemy.dx *= -1;
                 
-                if (tile === 1) { // Platform
-                    let overlapX = Math.min(player.x + player.width - tx, tx + TILE_SIZE - player.x);
-                    let overlapY = Math.min(player.y + player.height - ty, ty + TILE_SIZE - player.y);
+                // Potential platform boundary check (commented for simplicity):
+                // let platBelow = platforms.find(p => enemy.x + enemy.width/2 > p.x && enemy.x + enemy.width/2 < p.x + p.width && Math.abs(enemy.y + enemy.height - p.y) < 5);
+                // if(!platBelow || enemy.x < platBelow.x || enemy.x + enemy.width > platBelow.x + platBelow.width) enemy.dx *= -1;
+            }
 
-                    if (overlapX > overlapY) {
-                        if (player.velY > 0) { // Falling
-                            player.y = ty - player.height;
-                            player.velY = 0;
-                            player.grounded = true;
-                        } else { // Hitting head
-                            player.y = ty + TILE_SIZE;
-                            player.velY = 0;
+            enemy.x += enemy.dx;
+            enemyEl.style.left = enemy.x + 'px';
+
+            // Check collision with player
+            if (isColliding(player, enemy) && !player.isInvincible && !enemy.invulnerable) {
+                // Stomp detection (Mario physics: falling from above)
+                if (player.vy > 0 && player.y + player.height < enemy.y + enemy.height / 2) {
+                    player.vy = upgrades.jumpBoost.currentForce * 0.7; // Stomp bounce
+                    
+                    if (enemy.boss) {
+                        enemy.health--;
+                        state.score += 50;
+                        if (enemy.health <= 0) {
+                            enemy.dying = true;
+                            state.score += 500;
+                        } else {
+                            // Brief invulnerability after being stomped
+                            enemy.invulnerable = true;
+                            enemyEl.style.border = '4px solid #fff';
+                            setTimeout(()=> { 
+                                enemy.invulnerable = false;
+                                enemyEl.style.border = '4px solid #fff';
+                                }, 500);
                         }
+                    } else if (enemy.type === 'koopa' && !enemy.inShell) {
+                        // Koopa mechanics
+                        enemy.inShell = true;
+                        enemy.dx = 0;
+                        enemyEl.style.borderRadius = '20px 20px 0 0';
+                        enemyEl.style.height = '20px';
+                        enemy.height = 20;
+                        enemy.y += 12; // Lower to ground
+                        enemyEl.style.top = enemy.y + 'px';
+                        state.score += 20;
+                    } else if (enemy.inShell && enemy.dx === 0) {
+                        // Kick shell
+                        enemy.dx = 10 * (player.x < enemy.x ? 1 : -1);
+                        enemy.invulnerable = true; // Prevents re-stomp immediately
+                        setTimeout(()=> { enemy.invulnerable = false; }, 200);
+                        state.score += 10;
                     } else {
-                        player.x = player.velX > 0 ? tx - player.width : tx + TILE_SIZE;
+                        // Normal enemy stomp (Goomba or moving shell)
+                        enemy.dying = true;
+                        state.score += 10;
+                        if (state.isPowerupActive) { // Spawn coin on death with powerup
+                            let c = Math.random() > 0.5 ? 2 : 1;
+                            addCoins(c * upgrades.moreCoins.value);
+                        }
                     }
-                } 
-                else if (tile === 2) { // Spike
-                    alert("Game Over! Try again.");
-                    location.reload();
-                } 
-                else if (tile === 3) { // Gem
-                    level[row][col] = 0;
-                    gems++;
-                    document.getElementById('gemCount').innerText = gems;
+                } else {
+                    // Normal collision = player hit
+                    if (state.isPowerupActive) {
+                        // Powerup hit logic (could shrink player, but here we just end powerup)
+                        endPowerup();
+                        // Brief invincibility after powerup lost
+                        player.isInvincible = true;
+                        playerEl.style.opacity = 0.5;
+                        setTimeout(()=>{
+                            player.isInvincible = false;
+                            playerEl.style.opacity = 1;
+                        }, 1000);
+                    } else {
+                        // Dead
+                        gameOver();
+                    }
+                }
+            }
+            
+            // Koopa shell collision with other enemies
+            if(enemy.inShell && enemy.dx !== 0) {
+                for(let j = enemies.length - 1; j >= 0; j--) {
+                    if(i !== j && isColliding(enemy, enemies[j]) && !enemies[j].dying && !enemies[j].boss) {
+                        enemies[j].dying = true;
+                        state.score += 15;
+                    }
                 }
             }
         }
     }
-}
 
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // --- Powerup & Coins ---
 
-    // Camera follow logic
-    let camX = -player.x + canvas.width / 2;
-    ctx.save();
-    ctx.translate(camX, 0);
+    function spawnPowerup() {
+        if (Math.random() > 0.5 && platforms.length > 2) {
+            // Spawn on a random platform
+            const plat = platforms[Math.floor(Math.random() * (platforms.length - 1) + 1)]; // Avoid first platform
+            powerup = {
+                x: plat.x + plat.width / 2 - 16,
+                y: plat.y - 32,
+                width: 32, height: 32,
+                active: true
+            };
+            powerupEl.style.left = powerup.x + 'px';
+            powerupEl.style.top = powerup.y + 'px';
+            powerupEl.style.display = 'block';
+        }
+    }
 
-    // Draw Level
-    for (let row = 0; row < level.length; row++) {
-        for (let col = 0; col < level[row].length; col++) {
-            let tile = level[row][col];
-            let tx = col * TILE_SIZE;
-            let ty = canvas.height - (level.length * TILE_SIZE) + (row * TILE_SIZE);
+    function updatePowerup() {
+        if (powerup && powerup.active && isColliding(player, powerup)) {
+            activatePowerup();
+            powerup.active = false;
+            powerupEl.style.display = 'none';
+        }
 
-            if (tile === 1) {
-                ctx.fillStyle = '#444';
-                ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
-            } else if (tile === 2) {
-                ctx.fillStyle = 'black';
-                ctx.beginPath();
-                ctx.moveTo(tx, ty + TILE_SIZE);
-                ctx.lineTo(tx + TILE_SIZE/2, ty);
-                ctx.lineTo(tx + TILE_SIZE, ty + TILE_SIZE);
-                ctx.fill();
-            } else if (tile === 3) {
-                ctx.fillStyle = '#00f';
-                ctx.beginPath();
-                ctx.arc(tx + 20, ty + 20, 8, 0, Math.PI * 2);
-                ctx.fill();
+        // Coins (only check if powerup is on)
+        if (state.isPowerupActive) {
+            const coinEls = coinsContainer.children;
+            for (let i = 0; i < availableCoins.length; i++) {
+                if (!availableCoins[i].collected && isColliding(player, availableCoins[i])) {
+                    availableCoins[i].collected = true;
+                    coinEls[i].style.display = 'none';
+                    addCoins(1 * upgrades.moreCoins.value);
+                    state.score += 5;
+                }
             }
         }
     }
 
-    // Draw Player
-    ctx.fillStyle = player.stats.color;
-    ctx.fillRect(player.x, player.y, player.width, player.height);
+    function activatePowerup() {
+        state.isPowerupActive = true;
+        // Make coins visible
+        const coinEls = coinsContainer.children;
+        for (let el of coinEls) el.style.display = 'block';
+        
+        // Powerup visual cue (e.g., player changes color/size)
+        playerEl.style.backgroundColor = '#ff66ff'; 
+        player.width = 40; player.height = 40; // Grow a little
+        player.x -= 4; player.y -= 4; // Center grow
+        playerEl.style.width = player.width + 'px';
+        playerEl.style.height = player.height + 'px';
 
-    ctx.restore();
-    update();
-    requestAnimationFrame(draw);
-}
+        powerupTimeEl.style.display = 'block';
+        
+        let timeLeft = POWERUP_DURATION / 1000;
+        powerupTimeEl.innerText = `Powerup: ${timeLeft}s`;
 
-window.addEventListener('resize', resize);
-draw();
+        if (state.powerupTimer) clearInterval(state.powerupTimer);
+        
+        state.powerupTimer = setInterval(() => {
+            timeLeft--;
+            if (timeLeft > 0) {
+                powerupTimeEl.innerText = `Powerup: ${timeLeft}s`;
+            } else {
+                endPowerup();
+            }
+        }, 1000);
+    }
+
+    function endPowerup() {
+        state.isPowerupActive = false;
+        clearInterval(state.powerupTimer);
+        powerupTimeEl.style.display = 'none';
+
+        // Hide remaining coins
+        const coinEls = coinsContainer.children;
+        for (let el of coinEls) el.style.display = 'none';
+
+        // Reset player visuals
+        playerEl.style.backgroundColor = '#ff3333';
+        player.x += 4; player.y += 4; // Re-center shrink
+        player.width = 32; player.height = 32;
+        playerEl.style.width = player.width + 'px';
+        playerEl.style.height = player.height + 'px';
+    }
+
+    function addCoins(amount) {
+        state.coins += amount;
+        coinCountEl.innerText = state.coins;
+    }
+
+    // --- UI, Score, Shop, Game Over ---
+
+    function updateUI() {
+        scoreEl.innerText = state.score;
+        coinCountEl.innerText = state.coins;
+    }
+
+    function gameOver() {
+        state.isRunning = false;
+        clearInterval(gameInterval);
+        endPowerup(); // Clean up if active
+        gameOverEl.style.display = 'flex';
+        document.getElementById('final-score').innerText = state.score;
+        document.getElementById('final-coins').innerText = state.coins;
+    }
+
+    function toggleShop() {
+        state.shopOpen = !state.shopOpen;
+        if (state.shopOpen) {
+            upgradeShopEl.style.display = 'flex';
+            renderShopItems();
+            document.getElementById('shop-coins').innerText = state.coins;
+        } else {
+            upgradeShopEl.style.display = 'none';
+        }
+    }
+
+    function renderShopItems() {
+        shopItemsContainer.innerHTML = '';
+        
+        // Helper function for shop buttons
+        const createShopItem = (id, name, data, callback) => {
+            const item = document.createElement('div');
+            item.style.margin = '15px';
+            const cost = data.basePrice * (data.level + 1);
+            const isMax = data.level >= data.maxLevel;
+            item.innerHTML = `
+                <div>${name} (Lv ${data.level}/${data.maxLevel})</div>
+                <button ${isMax ? 'disabled style="background:#888"' : ''} onclick="${callback}()">
+                    Buy Upgrade <span class="price">${isMax ? 'MAXED' : cost + ' Coins'}</span>
+                </button>
+            `;
+            shopItemsContainer.appendChild(item);
+        };
+
+        createShopItem('jump', 'Jump Boost', upgrades.jumpBoost, 'buyJumpUpgrade');
+        createShopItem('speed', 'Speed Boost', upgrades.speedBoost, 'buySpeedUpgrade');
+        createShopItem('coins', 'More Coins', upgrades.moreCoins, 'buyCoinsUpgrade');
+    }
+
+    // Purchase Functions
+    function buyUpgrade(type, callbackSuccess) {
+        const u = upgrades[type];
+        const cost = u.basePrice * (u.level + 1);
+        if (state.coins >= cost && u.level < u.maxLevel) {
+            state.coins -= cost;
+            u.level++;
+            callbackSuccess(u);
+            toggleShop(); toggleShop(); // Refresh shop view
+        } else if (u.level >= u.maxLevel) {
+            alert("Upgrade Maxed!");
+        } else {
+            alert("Not enough coins!");
+        }
+    }
+
+    // Define success callbacks
+    window.buyJumpUpgrade = () => buyUpgrade('jumpBoost', (u) => { u.currentForce -= 2; }); // Force is negative
+    window.buySpeedUpgrade = () => buyUpgrade('speedBoost', (u) => { u.currentSpeed += 1.5; });
+    window.buyCoinsUpgrade = () => buyUpgrade('moreCoins', (u) => { u.value += 1; });
+
+    document.getElementById('close-shop').addEventListener('click', toggleShop);
+
+    // --- Input Handling (Keyboard & Mobile) ---
+
+    // Keyboard
+    document.addEventListener('keydown', (e) => {
+        if (!state.isRunning || state.shopOpen) return;
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+        if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+        if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') keys.jump = true;
+        if (e.code === 'KeyE') toggleShop();
+    });
+
+    document.addEventListener('keyup', (e) => {
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+        if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+        if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') keys.jump = false;
+    });
+
+    // Mobile (Touch)
+    if (state.mobile) {
+        const attachMobileControl = (id, keyName) => {
+            const btn = document.getElementById(id);
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyName] = true; });
+            btn.addEventListener('touchend', (e) => { keys[keyName] = false; });
+        };
+
+        attachMobileControl('move-left', 'left');
+        attachMobileControl('move-right', 'right');
+        
+        // Jump is special, needs single tap behavior to avoid infinite jumping on hold
+        const jumpBtn = document.getElementById('move-jump');
+        jumpBtn.addEventListener('touchstart', (e) => {
+             e.preventDefault(); 
+             if(!state.shopOpen) keys.jump = true; 
+        });
+        jumpBtn.addEventListener('touchend', (e) => { keys.jump = false; });
+
+        document.getElementById('move-upgrade').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (state.isRunning) toggleShop();
+        });
+    }
+
+    // --- Start ---
+    startGame();
+
 </script>
+
 </body>
 </html>
