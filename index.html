@@ -3,249 +3,165 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mario Clone - Full Build</title>
+    <title>Mario Mobile Fixed</title>
     <style>
-        :root { --sky: #5c94fc; --grass: #00a800; --dirt: #944824; }
-        body { margin: 0; padding: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Courier New', monospace; overflow: hidden; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #5c94fc; font-family: sans-serif; }
+        canvas { display: block; width: 100vw; height: 100vh; background: #5c94fc; }
         
-        #game-container { position: relative; width: 800px; height: 600px; background: var(--sky); overflow: hidden; border: 4px solid #000; touch-action: none; }
+        /* Mobile Overlay Buttons */
+        .controls { position: fixed; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; pointer-events: none; z-index: 10; }
+        .btn { width: 70px; height: 70px; background: rgba(255,255,255,0.3); border: 3px solid #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; color: white; font-size: 30px; pointer-events: auto; user-select: none; -webkit-user-select: none; }
+        #shop-btn { background: gold; color: black; border-color: orange; font-weight: bold; }
         
-        /* Entities */
-        .player { position: absolute; width: 32px; height: 32px; background: #ff0000; border: 2px solid #000; z-index: 10; transition: transform 0.1s; }
-        .platform { position: absolute; background: var(--dirt); border-top: 8px solid var(--grass); z-index: 5; }
-        .enemy { position: absolute; width: 32px; height: 32px; background: #8b4513; border-radius: 4px; z-index: 6; }
-        .koopa { background: #228b22 !important; border-radius: 15px 15px 0 0 !important; }
-        .boss { width: 64px; height: 64px; background: #4b0082 !important; border: 4px solid #fff !important; }
-        .coin { position: absolute; width: 16px; height: 16px; background: #ffd700; border-radius: 50%; border: 2px solid #b8860b; z-index: 4; }
-        .powerup { position: absolute; width: 24px; height: 24px; background: #ff69b4; border-radius: 50%; animation: pulse 1s infinite; z-index: 7; }
-
-        /* UI */
-        #hud { position: absolute; top: 10px; width: 100%; display: flex; justify-content: space-around; color: white; text-shadow: 2px 2px #000; font-size: 18px; z-index: 100; pointer-events: none; }
-        #shop-menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); padding: 20px; border: 4px solid gold; display: none; color: white; z-index: 200; text-align: center; }
-        .shop-item { margin: 10px 0; padding: 10px; border: 1px solid #555; cursor: pointer; }
-        .shop-item:hover { background: #333; }
-
-        /* Controls */
-        #mobile-controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 30px; box-sizing: border-box; z-index: 150; }
-        .btn { width: 70px; height: 70px; background: rgba(255,255,255,0.3); border: 3px solid #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; color: white; font-size: 30px; font-weight: bold; user-select: none; }
-        
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+        #ui { position: fixed; top: 10px; width: 100%; display: flex; justify-content: space-around; color: white; font-weight: bold; text-shadow: 2px 2px #000; pointer-events: none; }
     </style>
 </head>
 <body>
 
-<div id="game-container">
-    <div id="hud">
-        <span>SCORE: <span id="score">0</span></span>
-        <span>COINS: <span id="coins">0</span></span>
-        <span>STAGE: <span id="stage">1</span></span>
+<div id="ui">
+    <span>SCORE: <span id="score">0</span></span>
+    <span>COINS: <span id="coins">0</span></span>
+    <span>LVL: <span id="stage">1</span></span>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<div class="controls">
+    <div style="display:flex; gap: 15px;">
+        <div class="btn" id="leftBtn">←</div>
+        <div class="btn" id="rightBtn">→</div>
     </div>
-
-    <div id="world"></div>
-    <div id="player" class="player"></div>
-
-    <div id="shop-menu">
-        <h2>UPGRADE SHOP</h2>
-        <div class="shop-item" onclick="buyUpgrade('speed')">Speed + (10 Coins)</div>
-        <div class="shop-item" onclick="buyUpgrade('jump')">Jump + (15 Coins)</div>
-        <button onclick="toggleShop()" style="margin-top: 10px;">Close</button>
-    </div>
-
-    <div id="mobile-controls">
-        <div style="display: flex; gap: 20px;">
-            <div class="btn" id="leftBtn">←</div>
-            <div class="btn" id="rightBtn">→</div>
-        </div>
-        <div style="display: flex; gap: 20px;">
-            <div class="btn" id="shopBtn" style="background: gold; color: #000;">$</div>
-            <div class="btn" id="jumpBtn">↑</div>
-        </div>
+    <div style="display:flex; gap: 15px;">
+        <div class="btn" id="shop-btn">$</div>
+        <div class="btn" id="jumpBtn">↑</div>
     </div>
 </div>
 
 <script>
-    const world = document.getElementById('world');
-    const playerEl = document.getElementById('player');
-    const shopMenu = document.getElementById('shop-menu');
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Resize to fit phone screen
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
 
-    // Game Variables
-    let gameState = { score: 0, coins: 0, stage: 1, shopOpen: false };
-    let player = { x: 50, y: 500, vx: 0, vy: 0, w: 32, h: 32, onGround: false, speed: 5, jump: -15, isBig: false };
-    let platforms = [], enemies = [], items = [];
+    let score = 0, coins = 0, stage = 1;
+    let player = { x: 50, y: 0, w: 30, h: 30, vx: 0, vy: 0, speed: 5, jump: -15, big: false };
+    let platforms = [], enemies = [], coinsArr = [];
     let keys = { left: false, right: false, jump: false };
 
-    function initStage() {
-        world.innerHTML = '';
-        platforms = []; enemies = []; items = [];
+    function initLevel() {
+        platforms = []; enemies = []; coinsArr = [];
+        // Ground
+        platforms.push({ x: 0, y: canvas.height - 100, w: canvas.width * 2, h: 100 });
         
-        // 1. Create Ground
-        addPlatform(0, 550, 800, 50);
-
-        // 2. Boss Logic (Every 5th level)
-        if (gameState.stage % 5 === 0) {
-            addEnemy(600, 480, 'boss', 10);
-        } else {
-            // Normal Level Gen
-            for(let i=0; i<3; i++) {
-                addPlatform(200 + (i*150), 400 - (i*80), 120, 20);
-                addEnemy(250 + (i*150), 360, Math.random() > 0.5 ? 'koopa' : 'enemy');
+        // Random Platforms
+        for(let i=0; i<5; i++) {
+            platforms.push({ x: 100 + (i*200), y: canvas.height - 200 - (i*50), w: 120, h: 20 });
+            if(Math.random() > 0.5) {
+                enemies.push({ x: 150 + (i*200), y: canvas.height - 230 - (i*50), w: 30, h: 30, dx: -2, type: stage % 5 === 0 ? 'boss' : 'koopa' });
             }
+            coinsArr.push({ x: 150 + (i*200), y: canvas.height - 280 - (i*50), w: 15, h: 15 });
         }
-
-        // 3. Add Powerup and some coins
-        addPowerup(400, 100);
-        for(let i=0; i<5; i++) addCoin(Math.random()*700, 200 + (Math.random()*200));
-
-        player.x = 50; player.y = 510; player.vy = 0;
-        document.getElementById('stage').innerText = gameState.stage;
+        player.y = canvas.height - 150;
+        player.vx = 0; player.vy = 0;
     }
 
-    function addPlatform(x, y, w, h) {
-        platforms.push({x, y, w, h});
-        let div = document.createElement('div');
-        div.className = 'platform';
-        div.style.cssText = `left:${x}px; top:${y}px; width:${w}px; height:${h}px;`;
-        world.appendChild(div);
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Platforms
+        ctx.fillStyle = '#944824';
+        platforms.forEach(p => {
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.fillStyle = '#00a800';
+            ctx.fillRect(p.x, p.y, p.w, 10);
+            ctx.fillStyle = '#944824';
+        });
+
+        // Draw Player
+        ctx.fillStyle = player.big ? 'pink' : 'red';
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        // Draw Enemies
+        enemies.forEach(e => {
+            ctx.fillStyle = e.type === 'boss' ? 'purple' : 'green';
+            ctx.fillRect(e.x, e.y, e.w, e.h);
+            e.x += e.dx;
+            if(e.x < 0 || e.x > canvas.width) e.dx *= -1;
+        });
+
+        // Draw Coins
+        ctx.fillStyle = 'gold';
+        coinsArr.forEach(c => ctx.beginPath() || ctx.arc(c.x, c.y, 8, 0, Math.PI*2) || ctx.fill());
+
+        updatePhysics();
+        requestAnimationFrame(draw);
     }
 
-    function addEnemy(x, y, type, hp=1) {
-        let e = { x, y, w:32, h:32, type, dx: -2, hp, div: document.createElement('div') };
-        if(type === 'boss') { e.w = 64; e.h = 64; e.y -= 32; }
-        e.div.className = 'enemy ' + type;
-        e.div.style.cssText = `left:${e.x}px; top:${e.y}px; width:${e.w}px; height:${e.h}px;`;
-        enemies.push(e);
-        world.appendChild(e.div);
-    }
-
-    function addCoin(x, y) {
-        let c = { x, y, w: 16, h: 16, type: 'coin', div: document.createElement('div') };
-        c.div.className = 'coin';
-        c.div.style.cssText = `left:${x}px; top:${y}px;`;
-        items.push(c);
-        world.appendChild(c.div);
-    }
-
-    function addPowerup(x, y) {
-        let p = { x, y, w: 24, h: 24, type: 'powerup', div: document.createElement('div') };
-        p.div.className = 'powerup';
-        p.div.style.cssText = `left:${x}px; top:${y}px;`;
-        items.push(p);
-        world.appendChild(p.div);
-    }
-
-    function update() {
-        if (gameState.shopOpen) return requestAnimationFrame(update);
-
-        // Player Physics
-        if (keys.left) player.vx = -player.speed;
-        else if (keys.right) player.vx = player.speed;
+    function updatePhysics() {
+        if(keys.left) player.vx = -player.speed;
+        else if(keys.right) player.vx = player.speed;
         else player.vx *= 0.8;
 
         player.vy += 0.8; // Gravity
         player.x += player.vx;
         player.y += player.vy;
-        player.onGround = false;
 
-        // Platform Collision
+        let onGround = false;
         platforms.forEach(p => {
-            if (player.x < p.x + p.w && player.x + player.w > p.x && player.y + player.h > p.y && player.y < p.y + p.h) {
-                if (player.vy > 0 && player.y + player.h - player.vy <= p.y) {
+            if(player.x < p.x + p.w && player.x + player.w > p.x && player.y + player.h > p.y && player.y < p.y + p.h) {
+                if(player.vy > 0) {
                     player.y = p.y - player.h;
                     player.vy = 0;
-                    player.onGround = true;
+                    onGround = true;
                 }
             }
         });
 
-        if (keys.jump && player.onGround) player.vy = player.jump;
+        if(keys.jump && onGround) player.vy = player.jump;
 
-        // Enemies & Items
-        enemies.forEach((e, index) => {
-            e.x += e.dx;
-            if (e.x < 0 || e.x > 760) e.dx *= -1;
-            e.div.style.left = e.x + 'px';
+        // Collect Coins
+        coinsArr = coinsArr.filter(c => {
+            let hit = player.x < c.x + 10 && player.x + player.w > c.x - 10 && player.y < c.y + 10 && player.y + player.h > c.y - 10;
+            if(hit) { coins++; score += 10; document.getElementById('coins').innerText = coins; document.getElementById('score').innerText = score; }
+            return !hit;
+        });
 
-            // Collision with Player
-            if (player.x < e.x + e.w && player.x + player.w > e.x && player.y + player.h > e.y && player.y < e.y + e.h) {
-                if (player.vy > 0 && player.y < e.y) { // Stomp
+        // Enemy Collision
+        enemies.forEach((e, i) => {
+            if(player.x < e.x + e.w && player.x + player.w > e.x && player.y + player.h > e.y && player.y < e.y + e.h) {
+                if(player.vy > 0) { // Stomp
+                    enemies.splice(i, 1);
                     player.vy = -10;
-                    e.hp--;
-                    if(e.hp <= 0) {
-                        e.div.remove();
-                        enemies.splice(index, 1);
-                        gameState.score += 100;
-                    }
-                } else { // Hit player
-                    if (player.isBig) {
-                        player.isBig = false;
-                        playerEl.style.transform = "scale(1)";
-                        player.y -= 20; // Pop up slightly
-                    } else {
-                        alert("Game Over! Stage reached: " + gameState.stage);
-                        gameState.stage = 1; gameState.score = 0; gameState.coins = 0;
-                        initStage();
-                    }
+                    score += 50;
+                    if(enemies.length === 0) { stage++; document.getElementById('stage').innerText = stage; initLevel(); }
+                } else {
+                    initLevel(); // Die and Restart
                 }
             }
         });
-
-        items.forEach((item, index) => {
-            if (player.x < item.x + item.w && player.x + player.w > item.x && player.y + player.h > item.y && player.y < item.y + item.h) {
-                item.div.remove();
-                items.splice(index, 1);
-                if(item.type === 'coin') { gameState.coins++; gameState.score += 10; }
-                if(item.type === 'powerup') { player.isBig = true; playerEl.style.transform = "scale(1.5)"; }
-            }
-        });
-
-        // Stage Clear
-        if (enemies.length === 0) {
-            gameState.stage++;
-            initStage();
-        }
-
-        // Update Display
-        playerEl.style.left = player.x + 'px';
-        playerEl.style.top = player.y + 'px';
-        document.getElementById('score').innerText = gameState.score;
-        document.getElementById('coins').innerText = gameState.coins;
-
-        requestAnimationFrame(update);
     }
 
-    // Shop & Upgrades
-    function toggleShop() {
-        gameState.shopOpen = !gameState.shopOpen;
-        shopMenu.style.display = gameState.shopOpen ? 'block' : 'none';
+    // Mobile Button Logic
+    function bind(id, k) {
+        const b = document.getElementById(id);
+        b.addEventListener('touchstart', (e) => { e.preventDefault(); keys[k] = true; });
+        b.addEventListener('touchend', (e) => { e.preventDefault(); keys[k] = false; });
     }
-
-    function buyUpgrade(type) {
-        if (type === 'speed' && gameState.coins >= 10) {
-            player.speed += 1; gameState.coins -= 10;
-        } else if (type === 'jump' && gameState.coins >= 15) {
-            player.jump -= 2; gameState.coins -= 15;
-        } else {
-            alert("Not enough coins!");
-        }
-        toggleShop();
-    }
-
-    // Controls
-    const handleInput = (id, key, status) => {
-        document.getElementById(id).addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = status; });
-        document.getElementById(id).addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = !status; });
+    bind('leftBtn', 'left');
+    bind('rightBtn', 'right');
+    bind('jumpBtn', 'jump');
+    document.getElementById('shop-btn').onclick = () => {
+        if(coins >= 5) { coins -= 5; player.speed += 1; document.getElementById('coins').innerText = coins; }
     };
-    handleInput('leftBtn', 'left', true);
-    handleInput('rightBtn', 'right', true);
-    handleInput('jumpBtn', 'jump', true);
-    document.getElementById('shopBtn').addEventListener('touchstart', (e) => { e.preventDefault(); toggleShop(); });
 
-    window.onkeydown = (e) => { if(e.key === "ArrowLeft") keys.left = true; if(e.key === "ArrowRight") keys.right = true; if(e.key === "ArrowUp") keys.jump = true; if(e.key === "e") toggleShop(); };
-    window.onkeyup = (e) => { if(e.key === "ArrowLeft") keys.left = false; if(e.key === "ArrowRight") keys.right = false; if(e.key === "ArrowUp") keys.jump = false; };
-
-    initStage();
-    update();
+    initLevel();
+    draw();
 </script>
-
 </body>
 </html>
